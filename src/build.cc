@@ -231,6 +231,12 @@ string BuildStatus::FormatProgressStatus(
         return "";
       }
     } else {
+      if (*s == 92) {
+        while (*s != '\0' && *s != '[')
+            ++s;
+        out.push_back(27);
+      }
+
       out.push_back(*s);
     }
   }
