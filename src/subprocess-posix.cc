@@ -20,6 +20,7 @@
 #include <poll.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
 
@@ -53,8 +54,23 @@ Subprocess::~Subprocess() {
 
 bool Subprocess::Start(SubprocessSet* set, const string& command) {
   int output_pipe[2];
-  if (pipe(output_pipe) < 0)
+  if ((output_pipe[0] = posix_openpt(O_RDWR|O_NOCTTY)) == -1)
     Fatal("pipe: %s", strerror(errno));
+  if (grantpt(output_pipe[0]) == -1)
+    Fatal("grantpt: %s", strerror(errno));
+  if (unlockpt(output_pipe[0]) == -1)
+    Fatal("unlockpt: %s", strerror(errno));
+
+  const char * name(ptsname(output_pipe[0]));
+  if (name == NULL)
+  {
+    close(output_pipe[0]);
+    Fatal("ptsname: %s", strerror(errno));
+  }
+
+  if ((output_pipe[1] = open(name, O_WRONLY|O_NOCTTY)) == -1)
+    Fatal("open: %s", strerror(errno));
+
   fd_ = output_pipe[0];
 #if !defined(USE_PPOLL)
   // If available, we use ppoll in DoWork(); otherwise we use pselect
@@ -126,8 +142,6 @@ void Subprocess::OnPipeReady() {
   if (len > 0) {
     buf_.append(buf, len);
   } else {
-    if (len < 0)
-      Fatal("read: %s", strerror(errno));
     close(fd_);
     fd_ = -1;
   }
